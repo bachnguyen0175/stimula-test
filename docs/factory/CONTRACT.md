@@ -86,8 +86,9 @@ Before editing code, claim the issue with a deterministic remote branch:
 1. Start from the current default branch and create `claude/fq-<issue-number>`.
 2. Add an empty commit containing the unique run ID.
 3. Push without force to `refs/heads/claude/fq-<issue-number>`.
-4. Only the first push may succeed. A non-fast-forward rejection means another run owns the
-   item; stop without editing or changing labels.
+4. Only the first push may succeed. Any rejection (non-fast-forward, or `cannot lock ref`
+   when two pushes land together) means another run owns the item; stop without editing or
+   changing labels.
 5. After the successful push, replace `factory:ready-to-implement` with
    `factory:in-progress` and confirm the write.
 

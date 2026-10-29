@@ -57,11 +57,12 @@ else
   fail "not a Git repository"
 fi
 
-if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+if "$(dirname "$0")/gh-auth.sh" 2>/dev/null; then
   pass "GitHub CLI authenticated"
+  existing_labels="$(gh label list --limit 200 --json name --jq '.[].name' 2>/dev/null || true)"
   missing_labels=0
   for label in factory:ready-to-implement factory:ready-to-spec factory:needs-info factory:wait-to-implement factory:in-progress factory:awaiting-review; do
-    gh label view "$label" >/dev/null 2>&1 || missing_labels=$((missing_labels + 1))
+    printf '%s\n' "$existing_labels" | grep -qxF "$label" || missing_labels=$((missing_labels + 1))
   done
   [ "$missing_labels" -eq 0 ] && pass "live queue labels exist" || warn "$missing_labels live queue labels missing; run ./.factory/scripts/bootstrap-github.sh --apply"
 else

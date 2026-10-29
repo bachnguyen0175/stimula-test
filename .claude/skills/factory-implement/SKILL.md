@@ -49,8 +49,10 @@ git push origin HEAD:refs/heads/claude/fq-<issue-number>
 ```
 
 Two sessions may read the ready label at the same time. Their claim commits differ, so only
-the first push can create the remote ref; a later push is rejected as non-fast-forward.
-Treat that rejection as "already claimed" and stop. Never force the branch.
+the first push can create the remote ref. A later push is rejected as non-fast-forward; two
+pushes at the same moment get `cannot lock ref ... reference already exists` instead. Treat
+any rejected claim push as "already claimed" and stop. Don't retry it, and never force the
+branch.
 
 In a cloud session the `claude/` prefix is accepted for pushes. Do not add a slug or use a
 different branch: the deterministic name is the lock.

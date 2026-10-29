@@ -6,12 +6,8 @@ set -euo pipefail
 APPLY=0
 [ "${1:-}" = "--apply" ] && APPLY=1
 
-command -v gh >/dev/null 2>&1 || {
-  echo "error: gh is required to inspect or create factory labels" >&2
-  exit 2
-}
-gh auth status >/dev/null 2>&1 || {
-  echo "error: gh is not authenticated" >&2
+"$(dirname "$0")/gh-auth.sh" || {
+  echo "error: gh must be installed and logged in to create factory labels" >&2
   exit 2
 }
 
