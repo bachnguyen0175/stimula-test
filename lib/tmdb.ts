@@ -1,5 +1,5 @@
 import "server-only";
-import { mockDetail, mockPopular, mockTrending } from "./tmdb-fixtures";
+import { mockDetail, mockPopular, mockSearchOnly, mockTrending } from "./tmdb-fixtures";
 
 const TMDB_API_URL = "https://api.themoviedb.org/3";
 const TMDB_IMAGE_URL = "https://image.tmdb.org/t/p";
@@ -59,11 +59,24 @@ export async function getMovie(id: string): Promise<MovieDetail> {
   return toDetail(await request<TmdbMovie>(`/movie/${encodeURIComponent(id)}`));
 }
 
-async function request<T>(path: string): Promise<T> {
+export async function searchMovies(query: string): Promise<MovieSummary[]> {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+  if (mocksEnabled()) {
+    const needle = trimmed.toLowerCase();
+    return mockCatalog().filter((movie) => movie.title.toLowerCase().includes(needle)).map(toSummary);
+  }
+  const { results } = await request<{ results: TmdbMovie[] }>("/search/movie", { query: trimmed });
+  return results.map(toSummary);
+}
+
+// Caller params are set before api_key and language so they can never overwrite them.
+async function request<T>(path: string, params: Record<string, string> = {}): Promise<T> {
   const apiKey = process.env.TMDB_API_KEY?.trim();
   if (!apiKey) throw new MissingTmdbKeyError("TMDB_API_KEY is not configured");
 
   const url = new URL(`${TMDB_API_URL}${path}`);
+  for (const [name, value] of Object.entries(params)) url.searchParams.set(name, value);
   url.searchParams.set("api_key", apiKey);
   url.searchParams.set("language", "en-US");
 
@@ -93,6 +106,11 @@ function toDetail(movie: TmdbMovie): MovieDetail {
     runtime: movie.runtime ?? null,
     tagline: movie.tagline ?? "",
   };
+}
+
+function mockCatalog(): TmdbMovie[] {
+  const all: TmdbMovie[] = [...mockTrending, ...mockPopular, mockDetail, ...mockSearchOnly];
+  return all.filter((movie, index) => all.findIndex((other) => other.id === movie.id) === index);
 }
 
 function mocksEnabled() {
