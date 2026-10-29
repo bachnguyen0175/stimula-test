@@ -43,7 +43,14 @@ export async function searchMovies(query: string): Promise<MovieSummary[]>
 // lib/search-query.ts (new)
 export function parseSearchQuery(raw: string | string[] | undefined): string | null
 // "  inception " -> "inception";  "" | "   " | undefined -> null;  ["a","b"] -> "a"
+// longer than MAX_QUERY_LENGTH (100) -> first 100 characters, then trimmed
 ```
+
+**Who normalises what.** `searchMovies` is the canonical guard for its own input: it trims
+the query itself, returns `[]` for a blank query without a request, and lowercases only for
+mock matching. It does not rely on its caller. `parseSearchQuery` decides whether the page
+is in search mode at all and caps the length, so an arbitrarily long `q` never reaches an
+upstream URL.
 
 `searchMovies` returns the existing `MovieSummary` type, so `MovieGrid` and `MovieCard`
 render the results unchanged. No exported type changes.
@@ -62,15 +69,21 @@ GET /?q=inception
     MissingTmdbKeyError (either path) -> <SetupNotice />
 ```
 
-The search form is rendered on both paths, above the content, with `defaultValue={q ?? ""}`.
-It is a plain HTML GET form, so it needs no `"use client"` and no JavaScript, and Back
-works natively.
+The search form is rendered with `defaultValue={q ?? ""}`. On the home path it sits at the
+top of `.home-content`, **below** the full-bleed hero, not over it. On the search path
+there is no hero, and the form is the first thing in the page shell, above the results or
+the empty state. It is a plain HTML GET form, so it needs no `"use client"` and no
+JavaScript, and Back works natively.
+
+The search path renders a results heading and a `MovieGrid` of the matches. The empty
+state is a short paragraph with the fixed text `No movies matched` followed by the query,
+so a check can grep for that phrase without depending on how React escapes quotes.
 
 `request()` currently builds `new URL(TMDB_API_URL + path)` and sets `api_key` and
-`language`. The change adds an optional `params: Record<string, string>` that is applied
-with `url.searchParams.set`, so the query is encoded by `URLSearchParams` and never
-concatenated into the path. As a cheap guard, `searchMovies` returns `[]` for a blank
-query without making a request.
+`language`. The change adds an optional `params: Record<string, string>`, applied with
+`url.searchParams.set` **before** `api_key` and `language`. That way no caller-supplied
+param can overwrite the key or the language, and the query is encoded by `URLSearchParams`,
+never concatenated into the path.
 
 Mock catalog = `mockTrending ∪ mockPopular ∪ [mockDetail] ∪ mockSearchOnly`, deduplicated
 by id. Matching is a case-insensitive `includes` on the title.
@@ -84,10 +97,13 @@ by id. Matching is a case-insensitive `includes` on the title.
 ## What could break elsewhere
 
 - **Home page caching.** `app/page.tsx` exports `revalidate = 900` and is statically
-  rendered today. Reading `searchParams` makes it render per request. TMDB fetches are
-  still cached for 900 s by `fetch(..., { next: { revalidate: 900 } })`, so the extra cost
-  is render time, not TMDB calls. A hostile visitor can force uncached TMDB search calls by
-  varying `q`. That is acceptable for a demo; see risk 2.
+  rendered today. Awaiting `searchParams` makes `/` render dynamically for **every**
+  request, with or without `q`, which turns the `revalidate` export into dead config.
+  Slice 2 deletes that export. The only caching left is `fetch(..., { next: { revalidate:
+  900 } })` inside `request()`, so the home path still makes no extra TMDB calls. Each
+  distinct `q` creates its own Data Cache entry for 900 s, so a visitor varying `q` can
+  force uncached TMDB calls and grow the cache without bound. That is acceptable for a demo
+  nobody depends on; see least-confident decision 2.
 - **`request()` signature.** It is internal (not exported), so the only callers are in
   `lib/tmdb.ts`. Existing calls pass no params and behave as before. `lib/tmdb.test.ts`
   ("sends the key only from the server request" expects exactly 2 fetches for the home
@@ -108,9 +124,14 @@ by id. Matching is a case-insensitive `includes` on the title.
 2. **Mock search filters a fixture catalog,** not a canned response per query. The
    "no match" and case-insensitive scenarios can then be tested in mock mode without a
    fixture per query.
-3. **UI logic that can be unit-tested is pulled into `parseSearchQuery`.** The rendered
-   page is checked by fetching it in mock mode rather than by a component test, because a
-   component-testing library would mean editing `package.json`.
+3. **UI logic that can be unit-tested is pulled into `parseSearchQuery`. The rendered page
+   is checked over HTTP against a mock-mode production server,** with the exact commands in
+   slice 2's `done_when`. The checks grep for markup only a result card produces
+   (`href="/movies/27205"`), not for the query text, which the search input also echoes.
+   *Alternative considered:* a `renderToStaticMarkup` test of the page. `react-dom/server`
+   is already installed, but `vitest.config.ts` only collects `*.test.ts`, has no `@/`
+   alias, and runs in plain Node, where `next/image` and `next/link` would need mocking.
+   Wiring that up is more change than this feature, so it is left for a separate item.
 
 ## The three decisions I am least confident about
 
@@ -133,9 +154,13 @@ by id. Matching is a case-insensitive `includes` on the title.
    load-bearing boundary exposes `searchMovies`. I also didn't want one slice mixing a
    `deep`-gated load-bearing change with ordinary UI work. So slice 1 lands the boundary
    with both the mock and live paths (live tested against a stubbed `fetch`, no network),
-   and slice 2 lands the UI on top. The weaker point: the UI in slice 2 has no component
-   test. Its evidence is the `parseSearchQuery` unit tests plus fetching `/?q=…` from a
-   mock-mode server.
+   and slice 2 lands the UI on top. The weaker points:
+   - `searchMovies` ships with no caller until slice 2 merges.
+   - Slice 2 depends on slice 1 being on `main`, which `spec-slices.sh` cannot encode, so
+     slice 2's first task checks it.
+   - The UI in slice 2 has no component test. Its evidence is the `parseSearchQuery` unit
+     tests plus the HTTP checks against a mock-mode server, which the verifier runs by hand
+     because `gates.sh` does not run them.
 
 ## Risks / Trade-offs
 
@@ -143,5 +168,8 @@ by id. Matching is a case-insensitive `includes` on the title.
   agree; flagged above for the reviewer.
 - [Uncached TMDB calls driven by arbitrary `q`] → acceptable for a demo nobody depends on;
   revisit before any real deployment.
-- [No component-level test for the results view] → `done_when` for slice 2 includes an
-  HTTP check against a mock-mode server, which the verifier re-runs independently.
+- [No component-level test for the results view] → `done_when` for slice 2 spells out an
+  exact HTTP check against a mock-mode production server, which the verifier re-runs
+  independently.
+- [Caller-supplied params overwriting the API key] → `params` are applied before `api_key`,
+  and slice 1 asserts `api_key` appears exactly once in the search URL.

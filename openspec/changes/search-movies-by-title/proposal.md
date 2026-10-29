@@ -61,5 +61,6 @@ None. `openspec/specs/` has no existing capabilities.
 
 - `lib/tmdb.ts` (**load-bearing**) gains one exported search function and one TMDB call
   path. The API key handling does not change.
-- The home page becomes dynamic per request when a query is present.
+- The home page becomes dynamically rendered for every request, with or without a query,
+  because it now reads the query from the address. TMDB responses stay cached for 900 s.
 - No new dependencies, environment variables or routes.
