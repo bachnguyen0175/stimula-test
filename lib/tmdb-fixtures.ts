@@ -17,6 +17,10 @@ export const mockPopular = [
   { id: 389, title: "12 Angry Men", overview: "A dissenting juror forces a jury to reconsider the evidence before them.", poster_path: "/ow3wq89wM8qd5X7hWKxiRfsFf9C.jpg", backdrop_path: "/bxgTSUenZDHNFerQ1whRKplrMKF.jpg", release_date: "1957-04-10", vote_average: 8.5 },
 ];
 
+export const mockSearchOnly = [
+  { id: 27205, title: "Inception", overview: "A thief who steals secrets through dream-sharing is offered a chance to have his record erased.", poster_path: "/oYuLEt3zVCKq57qu2F8dT7NIa6f.jpg", backdrop_path: "/8ZTVqvKDQ8emSGUEMjsS4yHAwrp.jpg", release_date: "2010-07-15", vote_average: 8.4 },
+];
+
 export const mockDetail = {
   ...mockTrending[0],
   genres: [{ id: 18, name: "Drama" }, { id: 53, name: "Thriller" }],
