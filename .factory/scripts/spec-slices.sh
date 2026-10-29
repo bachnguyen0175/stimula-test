@@ -110,10 +110,15 @@ done
 [ "$APPLY" -eq 1 ] || { echo "(preview only; re-run with --apply to create $COUNT issue(s))"; exit 0; }
 
 command -v gh >/dev/null 2>&1 || { echo "error: --apply needs an authenticated gh CLI" >&2; exit 2; }
+# List titles rather than search: GitHub's issue search lags new issues by seconds, so a
+# quick re-run would duplicate slices. If the list fails, refuse rather than guess.
+existing_titles="$(gh issue list --state all --limit 1000 --json title --jq '.[].title')" || {
+  echo "error: could not list existing issues to check for duplicates; nothing created" >&2
+  exit 2
+}
 for i in $(seq 1 "$COUNT"); do
   title="$(cat "$OUT/$i.title")"
-  existing="$(gh issue list --state all --search "in:title \"$title\"" --json number --jq 'length' 2>/dev/null || true)"
-  if [ -n "$existing" ] && [ "$existing" != "0" ]; then
+  if printf '%s\n' "$existing_titles" | grep -qxF -- "$title"; then
     echo "skip    $title (an issue with this title already exists)"
     continue
   fi
