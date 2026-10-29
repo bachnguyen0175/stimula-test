@@ -66,6 +66,8 @@ trap restore EXIT INT TERM
 
 non_test_files=()
 while IFS= read -r -d '' path; do
+  # Run records are evidence committed with the fix, not part of it: never revert them.
+  case "$path" in docs/factory/runs/*) continue ;; esac
   is_test=0
   for test_path in "${test_paths[@]}"; do
     if [ "$path" = "$test_path" ] || [[ "$path" == "$test_path"/* ]]; then
